@@ -1,0 +1,125 @@
+version: "3"
+services:
+  # Http Service Layer
+  webserver:
+    image: webdevops/nginx
+    container_name: webserver
+    hostname: webserver
+    restart: always
+    env_file:
+      web/http.env
+    volumes:
+      - ./../../devops/infra/web/vhost.conf:/opt/docker/etc/nginx/vhost.conf
+      - ./../../volumes/nginx/logs/dev:/var/log/nginx/
+      - ./../../code:/home/app/current
+    expose:
+      - 80
+      - 443
+    networks:
+      net:
+        ipv4_address: 172.0.0.2
+  webserver-dev:
+    image: webdevops/nginx-dev
+    container_name: webserver-dev
+    hostname: webserver-dev
+    restart: always
+    env_file:
+      web/http-dev.env
+    volumes:
+      - ./../../devops/infra/web/vhost-dev.conf:/opt/docker/etc/nginx/vhost.conf
+      - ./../../volumes/nginx/logs/dev:/var/log/nginx/
+      - ./../../code:/home/app/current
+    expose:
+      - 80
+      - 443
+    networks:
+      net:
+        ipv4_address: 172.0.0.3
+  # Data persistence service layer
+  dbserver:
+    image: postgres
+    hostname: dbserver
+    container_name: dbserver
+    restart: always
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+    expose:
+      - 5432
+    volumes:
+      - ./../../volumes/postgressql/data:/var/lib/postgres/data
+      - ./../../devops/infra/db/:/docker-entrypoint-initdb.d
+    networks:
+      net:
+        ipv4_address: 172.0.0.4
+  cacheserver:
+    image: redis
+    container_name: cacheserver
+    hostname: cacheserver
+    command: redis-server --requirepass admin
+    expose:
+      - 6379
+    volumes:
+      - ./../../volumes/redis:/data
+    restart: always
+    networks:
+      net:
+        ipv4_address: 172.0.0.5
+  # Queue service layer
+  queueserver:
+    image: rabbitmq:management
+    container_name: queueserver
+    expose:
+      - 5672
+      - 15672
+    restart: always
+    env_file:
+      rabbit/queue.env
+    networks:
+      net:
+        ipv4_address: 172.0.0.6
+  # Application Service Layer
+  appserver:
+    image: webdevops/php:7.4
+    container_name: appserver
+    hostname: appserver
+    restart: always
+    volumes:
+      - ./../../code:/home/app/current
+    env_file:
+      php/app.env
+    expose:
+      - 9000
+    depends_on:
+      - webserver
+      - dbserver
+      - cacheserver
+      - queueserver
+    networks:
+      net:
+        ipv4_address: 172.0.0.7
+  appserver-dev:
+    image: webdevops/php-dev:7.4
+    container_name: appserver-dev
+    hostname: appserver-dev
+    restart: always
+    volumes:
+      - ./../../code:/home/app/current
+    env_file:
+      php/dev.env
+    expose:
+      - 9000
+    depends_on:
+      - webserver
+      - dbserver
+      - cacheserver
+      - queueserver
+    networks:
+      net:
+        ipv4_address: 172.0.0.8
+networks:
+  net:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.0.0.0/24
